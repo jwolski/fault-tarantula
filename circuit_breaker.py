@@ -71,16 +71,40 @@ class CircuitBreaker:
             self.buckets.append(Bucket(0, 0))
 
     def get(self, url):
-        if self._is_circuit_open():
+        """
+        Performs HTTP GET if circuit is closed. Otherwise, raises
+        CircuitOpenException.
+        """
+        if self.is_circuit_open():
             raise CircuitOpenException
 
         response = requests.get(url)
         status_code_bucket = response.status_code / 100
 
         if status_code_bucket == 5:
-            self._increase_error_count()
+            self.bump_error_count()
 
-    def _errors_in_window(self):
+    def bump_error_count(self):
+        """
+        Bumps error count for bucket based on current time.
+        """
+        error_ts = int(time.time())
+        bucket_index = error_ts % len(self.buckets)
+        bucket = self.buckets[bucket_index]
+
+        if bucket is None:
+            pass  # panic
+
+        if bucket.ts != error_ts:
+            bucket.ts = error_ts
+            bucket.count = 0
+
+        bucket.count += 1
+
+    def count_errors_in_window(self):
+        """
+        Counts number of errors appearing within error window.
+        """
         current_time = int(time.time())
         bucket_index = current_time % len(self.buckets)
         bucket = self.buckets[bucket_index]
@@ -95,22 +119,11 @@ class CircuitBreaker:
 
         return num_errors_in_window
 
-    def _increase_error_count(self):
-        error_ts = int(time.time())
-        bucket_index = error_ts % len(self.buckets)
-        bucket = self.buckets[bucket_index]
-
-        if bucket is None:
-            pass  # panic
-
-        if bucket.ts != error_ts:
-            bucket.ts = error_ts
-            bucket.count = 0
-
-        bucket.count += 1
-
-    def _is_circuit_open(self):
-        return self._errors_in_window() >= self.threshold
+    def is_circuit_open(self):
+        """
+        Returns True if circuit is open. Otherwise, returns False.
+        """
+        return self.count_errors_in_window() >= self.threshold
 
 
 if __name__ == '__main__':
