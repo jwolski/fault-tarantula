@@ -62,8 +62,8 @@ class Bucket:
 
 class CircuitBreaker:
     def __init__(self, threshold, window):
-        self.threshold = threshold
-        self.window = window
+        self.error_threshold = threshold
+        self.error_window = window
         self.buckets = []
 
         num_buckets = window
@@ -112,7 +112,7 @@ class CircuitBreaker:
         # Scan buckets within window and count errors
         num_errors_in_window = 0
         for bucket in self.buckets:
-            if current_time - bucket.ts > self.window:
+            if current_time - bucket.ts > self.error_window:
                 continue
 
             num_errors_in_window += bucket.count
@@ -123,7 +123,7 @@ class CircuitBreaker:
         """
         Returns True if circuit is open. Otherwise, returns False.
         """
-        return self.count_errors_in_window() >= self.threshold
+        return self.count_errors_in_window() >= self.error_threshold
 
 
 if __name__ == '__main__':
