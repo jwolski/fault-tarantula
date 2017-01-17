@@ -25,27 +25,62 @@ def main():
 
 
 def print_buckets(breaker, is_circuit_closed):
+    """
+    Prints bucket information.
+
+    Example output:
+
+    current time: Thu Jan  5 16:25:19 2017
+    current window: 1483629914 - 1483629919
+    circuit state: closed
+
+    BUCKET_TS       ERROR_COUNT     WITHIN_WINDOW
+    0               0               no
+    1483629916      1               yes
+    0               0               no
+    1483629918      1               yes
+    1483629919      1               yes
+    """
     os.system('clear')
 
-    # Preamble
+    # Assign preamble and header values
     current_time = int(time.time())
-    print 'current time: %s' % time.ctime(current_time)
-    window_lower_bound = current_time - breaker.window
-    print 'current window: %s - %s' % (window_lower_bound, current_time)
-    circuit_state_label = 'closed' if is_circuit_closed is True else 'open'
-    print 'circuit state: %s' % circuit_state_label
-    print
-
-    # Table Headers
+    window_lower_bound = current_time - breaker.error_window
     headers = ['BUCKET_TS', 'ERROR_COUNT', 'WITHIN_WINDOW']
+
+    # Print the preamble and table headers
+    def circuit_state_label():
+        if is_circuit_closed is True:
+            return '\033[92mclosed\033[39m'  # Green
+        else:
+            return '\033[91mopen\033[39m'  # Red
+
+    print 'current time: %s' % time.ctime(current_time)
+    print 'current window: %s - %s' % (window_lower_bound, current_time)
+    print 'circuit state: %s' % circuit_state_label()
+    print
     print '{:<15} {:<15} {:<15}'.format(*headers)
 
-    # Table Rows
+    def relative_time_label(bucket):
+        if bucket.ts == 0 or current_time - bucket.ts == 0:
+            return '0'
+        else:
+            return '-%d' % (current_time - bucket.ts)
+
+    def within_window_prefix(within_window):
+        if within_window is True:
+            return '\033[33m'
+        else:
+            return '\033[39m'
+
+    # Print the table rows
     for bucket in breaker.buckets:
-        within_window = current_time - bucket.ts <= breaker.window
+        relative_time = relative_time_label(bucket)
+        within_window = current_time - bucket.ts <= breaker.error_window
         within_window_label = 'yes' if within_window is True else 'no'
-        format_args = [bucket.ts, bucket.count, within_window_label]
-        print '{:<15} {:<15} {:<15}'.format(*format_args)
+        format_args = [within_window_prefix(within_window), relative_time,
+                       bucket.count, within_window_label]
+        print '{!s}{:<15} {:<15} {:<15}\033[39m'.format(*format_args)
 
     print
 
@@ -105,16 +140,12 @@ class CircuitBreaker:
         """
         Counts number of errors appearing within error window.
         """
-        current_time = int(time.time())
-        bucket_index = current_time % len(self.buckets)
-        bucket = self.buckets[bucket_index]
-
         # Scan buckets within window and count errors
+        current_time = int(time.time())
         num_errors_in_window = 0
         for bucket in self.buckets:
             if current_time - bucket.ts > self.error_window:
                 continue
-
             num_errors_in_window += bucket.count
 
         return num_errors_in_window
